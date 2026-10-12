@@ -256,7 +256,7 @@ function v_standby() {
   if (st && !st.link) notes.push(["status", "Phone link down", "", () => go("status")]);
   if (!un.length && f.length) notes.push(["read", "Last call", "$" + f[0].sym + " " + (f[0].mc || "") + " " + ago(f[0].ts), () => go("inbox")]);
   const t = d && d.trend && d.trend[0];
-  if (t) notes.push(["fire", "$" + t.sym, t.wallets + " wallets " + t.callers + " call" + (t.callers === 1 ? "" : "s"), () => go("trend")]);
+  if (t) notes.push(["fire", "$" + t.sym, t.wallets + " wallet" + (t.wallets === 1 ? "" : "s") + " " + t.callers + " call" + (t.callers === 1 ? "" : "s"), () => go("trend")]);
   m.innerHTML = h + '</div>';
   const box = m.querySelector(".notes");
   notes.slice(0, 4).forEach(([ic, a, b, fn]) => {
