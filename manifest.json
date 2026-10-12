@@ -1,7 +1,6 @@
 {
  "name": "Attic Phone",
  "short_name": "Attic Phone",
- "start_url": "./",
  "scope": "./",
  "display": "standalone",
  "background_color": "#dddbd3",
