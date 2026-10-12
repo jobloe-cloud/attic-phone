@@ -1,0 +1,346 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Attic Phone">
+<meta name="theme-color" content="#2a2926">
+<title>Attic Phone</title>
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="manifest" href="manifest.json">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+/* Attic Phone, pocket edition (his 10-12 order). Same screen as the desktop flip phone: e-ink paper,
+   pixel letters, chunky double borders, the > cursor and the blinking arrow. View-only. */
+:root { --paper:#dddbd3; --ink:#2a2926; --dim:#6f6d66; --hl:#2a2926; --pink:#ee80b0; }
+* { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+html,body { margin:0; height:100%; background:var(--ink); }
+body { font-family:"Press Start 2P", ui-monospace, monospace; color:var(--ink); -webkit-user-select:none; user-select:none;
+       overscroll-behavior:none; }
+#screen { position:fixed; inset:0; background:var(--paper); display:flex; flex-direction:column;
+          padding-top:env(safe-area-inset-top); padding-bottom:env(safe-area-inset-bottom); }
+#top { display:flex; align-items:center; justify-content:space-between; background:var(--ink); color:var(--paper);
+       font-size:12px; padding:10px 14px; min-height:36px; }
+#top.standby { background:transparent; color:var(--ink); }
+#main { flex:1; overflow-y:auto; -webkit-overflow-scrolling:touch; }
+#soft { display:flex; justify-content:space-between; border-top:2px solid var(--ink); font-size:12px; }
+#soft div { padding:16px 16px; min-width:40%; }
+#soft div:last-child { text-align:right; }
+#soft div:active { background:var(--ink); color:var(--paper); }
+.dim { color:var(--dim); }
+.b { text-shadow:1px 0 0 currentColor; }
+/* standby */
+.clock { font-size:48px; text-align:center; margin-top:28px; letter-spacing:2px; }
+.date { font-size:12px; text-align:center; margin-top:14px; }
+.notes { margin:34px 16px 0; }
+.note { display:flex; gap:12px; align-items:flex-start; padding:12px 6px; font-size:12px; line-height:20px; }
+.note:active { background:#cfccc2; }
+.note .ic { width:24px; flex:none; }
+.sig { display:flex; align-items:flex-end; gap:3px; height:14px; }
+.sig i { display:block; width:4px; background:var(--ink); border:1px solid var(--ink); }
+.sig.off i { background:transparent; }
+.bat { display:flex; align-items:center; }
+.bat .body { width:30px; height:14px; border:2px solid var(--ink); padding:1px; display:flex; gap:2px; }
+.bat .body i { width:5px; background:var(--ink); }
+.bat .tip { width:3px; height:6px; background:var(--ink); }
+/* menu grid */
+.grid { display:grid; grid-template-columns:repeat(2,1fr); gap:12px; padding:18px; }
+.tile { border:3px solid transparent; padding:18px 6px 14px; text-align:center; font-size:12px; }
+.tile:active, .tile.sel { border:3px double var(--ink); outline:2px solid var(--ink); outline-offset:-8px; }
+.tile .ic { height:48px; display:flex; justify-content:center; margin-bottom:14px; position:relative; }
+.badge { position:absolute; top:-6px; right:18%; background:var(--ink); color:var(--paper); font-size:10px; padding:3px 5px; }
+/* lists */
+.row { display:flex; gap:12px; padding:12px 14px; border-bottom:1px solid #c9c6bc; align-items:center; }
+.row:active { background:var(--ink); color:var(--paper); }
+.row:active .dim { color:var(--paper); }
+.row .txt { flex:1; min-width:0; }
+.l1 { display:flex; justify-content:space-between; font-size:12px; line-height:20px; gap:8px; }
+.l1 span:first-child { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.l2 { font-size:10px; line-height:18px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.read .l1 { color:var(--dim); }
+.empty { padding:24px 16px; font-size:12px; color:var(--dim); line-height:22px; }
+.srow { display:flex; justify-content:space-between; padding:11px 14px; font-size:11px; border-bottom:1px solid #c9c6bc; }
+.srow.bad { background:var(--ink); color:var(--paper); }
+/* message */
+.msg { padding:14px 16px 30px; }
+.msg .meta { font-size:10px; color:var(--dim); margin-bottom:14px; }
+.msg h1 { font-size:24px; font-weight:normal; margin:6px 0 16px; word-break:break-all; }
+.msg .kv { font-size:12px; line-height:24px; }
+.msg .body { font-size:12px; line-height:24px; margin-top:16px; white-space:pre-wrap; word-wrap:break-word; }
+/* pop-ups: the Pokemon box, as a style */
+.box { position:fixed; left:12px; right:12px; background:var(--paper); border:4px double var(--ink);
+       outline:3px solid var(--ink); outline-offset:-10px; padding:20px 20px; font-size:12px; line-height:22px; z-index:5; }
+#toast { bottom:calc(66px + env(safe-area-inset-bottom)); display:none; }
+#opts { bottom:calc(66px + env(safe-area-inset-bottom)); display:none; }
+#opts div { padding:12px 0 12px 22px; position:relative; }
+#opts div:active::before, #opts div.sel::before { content:""; position:absolute; left:2px; top:14px;
+       border-left:9px solid var(--ink); border-top:6px solid transparent; border-bottom:6px solid transparent; }
+#newcall { top:22%; display:none; text-align:left; }
+#newcall .hd { text-align:center; margin:10px 0 16px; }
+#newcall .acts { display:flex; justify-content:space-between; margin-top:22px; }
+#newcall .acts div { padding:10px 6px; }
+#newcall .acts div:active { background:var(--ink); color:var(--paper); }
+.arrow { display:inline-block; border-top:7px solid var(--ink); border-left:5px solid transparent; border-right:5px solid transparent;
+         animation:blink .9s steps(1) infinite; margin-left:6px; }
+@keyframes blink { 50% { opacity:0; } }
+#veil { position:fixed; inset:0; background:rgba(42,41,38,.35); display:none; z-index:4; }
+#setup { padding:30px 18px; font-size:12px; line-height:24px; }
+canvas.px { image-rendering:pixelated; }
+</style>
+</head>
+<body>
+<div id="screen">
+  <div id="top"><span id="tl"></span><span id="tr"></span></div>
+  <div id="main"></div>
+  <div id="soft"><div id="sl"></div><div id="sr"></div></div>
+</div>
+<div id="veil"></div>
+<div id="toast" class="box"></div>
+<div id="opts" class="box"></div>
+<div id="newcall" class="box"></div>
+<audio id="ring" preload="auto"></audio>
+<script>
+"use strict";
+// ---------------------------------------------------------------- pixel icons (same art as the desktop phone)
+const ICONS = {
+  inbox:["############","##........##","#.#......#.#","#..#....#..#","#...#..#...#","#....##....#","#..........#","#..........#","############"],
+  read:["....####....","..##....##..","##........##","############","##........##","#.#......#.#","#..#....#..#","#...####...#","############"],
+  fire:["......#.....",".....##.....",".....###....","....####.#..","...######.#.","..#########.","..####.####.",".####...###.",".###.....##.",".###.....##.","..###...##..","...######..."],
+  status:["..........##","..........##",".......##.##",".......##.##","....##.##.##","....##.##.##",".##.##.##.##",".##.##.##.##","############"],
+  sounds:[".....##.....","....####....","...######...","..########..","..########..","..########..",".##########.","############","............",".....##....."],
+  warn:[".....##.....","....####....","....####....","...##..##...","...##..##...","..###..###..","..###..###..",".##########.",".####..####.","############"],
+};
+function icon(name, s, col) {
+  const rows = ICONS[name], w = 12 * s, h = rows.length * s;
+  const c = document.createElement("canvas"); c.width = w * 2; c.height = h * 2; c.className = "px";
+  c.style.width = w + "px"; c.style.height = h + "px";
+  const g = c.getContext("2d"); g.fillStyle = col || "#2a2926";
+  rows.forEach((r, y) => [...r].forEach((ch, x) => { if (ch === "#") g.fillRect(x * s * 2, y * s * 2, s * 2, s * 2); }));
+  return c;
+}
+// ---------------------------------------------------------------- state
+const LS = {
+  get(k, d) { try { const v = localStorage.getItem("ap_" + k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem("ap_" + k, JSON.stringify(v)); } catch (e) {} },
+};
+(function takeLink() {                         // first open: the link from the attic carries #k=<key>&g=<gist>
+  const h = new URLSearchParams(location.hash.slice(1));
+  if (h.get("k")) { LS.set("key", h.get("k")); if (h.get("g")) LS.set("gist", h.get("g")); LS.set("base", null);
+    history.replaceState(null, "", location.pathname); }
+})();
+let S = { data:null, view:"standby", stack:[], cur:{}, msg:null, opt:null, err:null, lastOk:0 };
+let known = new Set(LS.get("known", [])), localRead = new Set(LS.get("read", []));
+let sound = LS.get("sound", true), unlocked = false;
+const $ = id => document.getElementById(id);
+const esc = t => String(t == null ? "" : t).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const CHAIN = { solana:"SOL", robinhood:"RH", ethereum:"ETH", bsc:"BNB", base:"BASE" };
+const money = v => { if (v == null) return "?"; v = +v; for (const [d,u] of [[1e9,"B"],[1e6,"M"],[1e3,"K"]]) if (v >= d) return (v < 10*d ? (v/d).toFixed(1).replace(".0","") : (v/d).toFixed(0)) + u; return v.toFixed(0); };
+const ago = ts => { const s = Math.max(0, Date.now()/1000 - ts); return s < 60 ? "now" : s < 3600 ? Math.floor(s/60)+"m ago" : s < 86400 ? Math.floor(s/3600)+"h ago" : Math.floor(s/86400)+"d ago"; };
+const hhmm = ts => new Date(ts*1000).toLocaleTimeString([], {hour:"2-digit", minute:"2-digit", hour12:false});
+// ---------------------------------------------------------------- the attic's address + data
+async function base(refresh) {
+  if (!refresh && LS.get("base")) return LS.get("base");
+  const g = LS.get("gist"); if (!g) throw new Error("no gist");
+  const j = await (await fetch("https://api.github.com/gists/" + g, {cache:"no-store"})).json();
+  const u = JSON.parse(j.files["attic.json"].content).url; LS.set("base", u); return u;
+}
+async function pull() {
+  const k = LS.get("key"); if (!k) return render();
+  for (const refresh of [false, true]) {
+    try {
+      const r = await fetch((await base(refresh)) + "/phonedata?k=" + encodeURIComponent(k), {cache:"no-store"});
+      if (r.status === 403) { S.err = "Key refused - open the link from the attic again."; break; }
+      if (!r.ok) throw new Error(r.status);
+      S.data = await r.json(); S.err = null; S.lastOk = Date.now(); newCalls(); break;
+    } catch (e) { S.err = "Can't reach the attic"; }
+  }
+  render();
+}
+function feed() { return (S.data && S.data.feed) || []; }
+function isUnread(x) { return x.unread && !localRead.has(x.id); }
+function markRead(x) {
+  if (localRead.has(x.id)) return;
+  localRead.add(x.id); LS.set("read", [...localRead].slice(-400));
+  base().then(b => fetch(b + "/phoneread?k=" + encodeURIComponent(LS.get("key")), {method:"POST", body:x.id})).catch(() => {});
+}
+// ---------------------------------------------------------------- new call: pop-up + ring
+function newCalls() {
+  const f = feed(); if (!f.length) return;
+  if (!known.size) { f.forEach(x => known.add(x.id)); LS.set("known", [...known]); return; }   // first run: nothing old rings
+  const fresh = f.filter(x => !known.has(x.id) && Date.now()/1000 - x.ts < 900);
+  f.forEach(x => known.add(x.id)); LS.set("known", [...known].slice(-500));
+  if (!fresh.length) return;
+  const t = fresh[0];
+  const what = t.kind === "pile" ? "Pile-up! " + (t.k || 0) + " wallets" : "From " + t.who;
+  S.pending = t.id;
+  popup(fresh.length > 1 ? fresh.length + " new calls!" : "New call!", what + ": $" + t.sym + " at " + (t.mc || "?"));
+  ring();
+}
+function ring(force) {
+  if (!(sound || force)) return;
+  const a = $("ring"); try { a.currentTime = 0; a.play().catch(() => toast("Tap once to allow the ring")); } catch (e) {}
+}
+function unlock() {                             // iPhone: audio may only start after a tap - prime it on the first one
+  if (unlocked) return; unlocked = true;
+  base().then(b => { const a = $("ring"); a.src = b + "/phonering"; a.muted = true;
+    a.play().then(() => { a.pause(); a.muted = false; a.currentTime = 0; }).catch(() => { a.muted = false; }); }).catch(() => {});
+}
+document.addEventListener("touchend", unlock, {passive:true}); document.addEventListener("click", unlock);
+let typer = null;
+function typeInto(el, text, done) {
+  clearInterval(typer); let i = 0; el.textContent = "";
+  typer = setInterval(() => { el.textContent = text.slice(0, ++i); if (i >= text.length) { clearInterval(typer); done && done(); } }, 28);
+}
+function popup(hd, text) {
+  const b = $("newcall");
+  b.innerHTML = '<div style="text-align:center"></div><div class="hd b">' + esc(hd) + '</div><div class="tx"></div>'
+    + '<div class="acts"><div id="pRead">Read</div><div id="pLater">Later</div></div>';
+  b.firstChild.appendChild(icon("inbox", 3)); b.style.display = "block"; $("veil").style.display = "block";
+  typeInto(b.querySelector(".tx"), text);
+  $("pRead").onclick = () => { closePop(); const i = feed().findIndex(x => x.id === S.pending); if (i >= 0) { S.stack = ["standby", "inbox"]; S.view = "inbox"; openMsg(i); } };
+  $("pLater").onclick = closePop;
+}
+function closePop() { $("newcall").style.display = "none"; $("veil").style.display = "none"; }
+let toastT = null;
+function toast(t) { const el = $("toast"); el.style.display = "block"; typeInto(el, t); clearTimeout(toastT); toastT = setTimeout(() => el.style.display = "none", 2600); }
+// ---------------------------------------------------------------- navigation (like a phone: Back goes where you came from)
+function go(v) { if (v !== S.view) S.stack.push(S.view); S.view = v; $("main").scrollTop = 0; render(); }
+function back() { if ($("opts").style.display === "block") return closeOpts(); S.view = S.stack.pop() || "standby"; render(); }
+function soft(l, lf, r, rf) { $("sl").textContent = l || ""; $("sr").textContent = r || ""; $("sl").onclick = lf || null; $("sr").onclick = rf || back; }
+function top(l, r, standby) {
+  $("top").className = standby ? "standby" : ""; $("tl").innerHTML = l; $("tr").innerHTML = r == null ? hhmm(Date.now()/1000) : r;
+}
+function openMsg(i) { S.msg = i; markRead(feed()[i]); if (S.view !== "msg") go("msg"); else render(); }
+function openOpts(item) {
+  S.opt = item; const o = $("opts");
+  o.innerHTML = '<div data-a="coin">Open coin</div><div data-a="chart">Open chart</div><div data-a="copy">Copy CA</div>';
+  o.style.display = "block"; $("veil").style.display = "block";
+  o.querySelectorAll("div").forEach(d => d.onclick = () => act(d.dataset.a));
+  soft("Select", null, "Back", closeOpts);
+}
+function closeOpts() { $("opts").style.display = "none"; $("veil").style.display = "none"; render(); }
+function act(a) {
+  const x = S.opt; closeOpts(); if (!x) return;
+  if (a === "coin") window.open(x.link, "_blank");
+  else if (a === "chart") window.open(x.chart, "_blank");
+  else { (navigator.clipboard ? navigator.clipboard.writeText(x.ca) : Promise.reject()).then(() => toast("CA of $" + x.sym + " copied!"), () => toast(x.ca)); }
+}
+$("veil").onclick = () => { closeOpts(); closePop(); };
+// ---------------------------------------------------------------- screens
+function render() {
+  const m = $("main");
+  if (!LS.get("key")) {
+    top("Attic Phone", ""); soft("", null, "", null);
+    m.innerHTML = '<div id="setup">Open the link the attic gave you once, then Share &gt; Add to Home Screen.</div>'; return;
+  }
+  ({ standby, menu, inbox, msg, trend, status, sounds })[S.view]();
+}
+function standby() {
+  const d = S.data, st = d && d.status;
+  const sig = '<div class="sig' + (st && st.link ? '' : ' off') + '">' + [6,9,12,15].map(h => '<i style="height:'+h+'px"></i>').join("") + '</div>';
+  const segs = !st ? 0 : st.up === st.total ? 4 : Math.min(3, Math.floor(st.up * 4 / st.total));
+  const bat = '<div class="bat"><div class="body">' + '<i></i>'.repeat(segs) + '</div><div class="tip"></div></div>';
+  top(sig, bat, true);
+  const now = new Date();
+  let h = '<div class="clock">' + hhmm(now / 1000) + '</div><div class="date">'
+    + now.toLocaleDateString("en-GB", {weekday:"short", day:"2-digit", month:"short"}).toUpperCase().replace(",", "") + '</div><div class="notes">';
+  const notes = [], f = feed(), un = f.filter(isUnread);
+  if (S.err) notes.push(["warn", S.err, S.lastOk ? "last update " + ago(S.lastOk/1000) : "", null]);
+  if (un.length) notes.push(["inbox", un.length + " new call" + (un.length > 1 ? "s" : ""), "$" + un[0].sym, () => go("inbox")]);
+  if (st && st.up < st.total) notes.push(["status", (st.total - st.up) + " program" + (st.total - st.up > 1 ? "s" : "") + " down", "", () => go("status")]);
+  if (st && !st.link) notes.push(["status", "Phone link down", "", () => go("status")]);
+  if (!un.length && f.length) notes.push(["read", "Last call", "$" + f[0].sym + " " + (f[0].mc || "") + " " + ago(f[0].ts), () => go("inbox")]);
+  const t = d && d.trend && d.trend[0];
+  if (t) notes.push(["fire", "$" + t.sym, t.wallets + " wallets " + t.callers + " call" + (t.callers === 1 ? "" : "s"), () => go("trend")]);
+  m.innerHTML = h + '</div>';
+  const box = m.querySelector(".notes");
+  notes.slice(0, 4).forEach(([ic, a, b, fn]) => {
+    const n = document.createElement("div"); n.className = "note";
+    const i = document.createElement("div"); i.className = "ic"; i.appendChild(icon(ic, 2)); n.appendChild(i);
+    n.insertAdjacentHTML("beforeend", '<div><div class="' + (ic === "fire" ? "b" : "") + '">' + esc(a) + '</div><div class="dim">' + esc(b) + '</div></div>');
+    if (fn) n.onclick = fn; box.appendChild(n);
+  });
+  soft("Menu", () => go("menu"), "Inbox", () => go("inbox"));
+}
+function menu() {
+  top("Menu");
+  const nun = feed().filter(isUnread).length;
+  const apps = [["inbox","Inbox"],["fire","Trending"],["status","Status"],["sounds","Sounds"]];
+  $("main").innerHTML = '<div class="grid"></div>';
+  const g = $("main").firstChild;
+  apps.forEach(([ic, label]) => {
+    const t = document.createElement("div"); t.className = "tile";
+    const i = document.createElement("div"); i.className = "ic"; i.appendChild(icon(ic, 4));
+    if (ic === "inbox" && nun) i.insertAdjacentHTML("beforeend", '<span class="badge">' + Math.min(nun, 99) + '</span>');
+    t.appendChild(i); t.insertAdjacentHTML("beforeend", label);
+    t.onclick = () => go({inbox:"inbox", fire:"trend", status:"status", sounds:"sounds"}[ic]); g.appendChild(t);
+  });
+  soft("", null, "Back");
+}
+function inbox() {
+  const f = feed(), nun = f.filter(isUnread).length;
+  top("Inbox", nun ? nun + " new" : String(f.length));
+  const m = $("main"); m.innerHTML = f.length ? "" : '<div class="empty">No calls yet</div>';
+  f.forEach((x, i) => {
+    const r = document.createElement("div"), un = isUnread(x); r.className = "row" + (un ? "" : " read");
+    const ic = document.createElement("div"); ic.appendChild(icon(un ? "inbox" : "read", 2)); r.appendChild(ic);
+    const who = x.kind === "pile" ? "PILE-UP " + (x.k || "") : x.who;
+    r.insertAdjacentHTML("beforeend", '<div class="txt"><div class="l1' + (un ? " b" : "") + '"><span>' + esc(who) + '</span><span>' + hhmm(x.ts)
+      + '</span></div><div class="l2 dim">$' + esc(x.sym) + " " + esc(x.mc || "?") + " " + (CHAIN[x.chain] || esc(x.chain)) + '</div></div>');
+    r.onclick = () => openMsg(i); m.appendChild(r);
+  });
+  soft("", null, "Back");
+}
+function msg() {
+  const x = feed()[S.msg]; if (!x) return back();
+  top(esc(x.kind === "pile" ? "Pile-up" : x.who), hhmm(x.ts));
+  let kv = "MC " + esc(x.mc || "?") + "  VOL " + esc(x.vol || "?") + "<br>" + (CHAIN[x.chain] || esc(x.chain));
+  let body;
+  if (x.kind === "pile") { kv += "  " + x.k + " wallets/" + x.win + "m"; body = x.k + " wallets piled into $" + x.sym + " within " + x.win + " minutes."; }
+  else { kv += "  " + esc(x.holders || "?") + " holders" + (x.hold ? "<br>Holds $" + esc(x.hold) : ""); body = x.thesis || "(no text)"; }
+  $("main").innerHTML = '<div class="msg"><div class="meta">' + ago(x.ts) + (x.kind === "call" ? " · callout" : "") + '</div><h1>$' + esc(x.sym)
+    + '</h1><div class="kv">' + kv + '</div><div class="body">' + esc(body) + '</div></div>';
+  const f = feed();
+  soft("Options", () => openOpts({sym:x.sym, ca:x.ca, link:x.link, chart:"https://dexscreener.com/" + x.chain + "/" + x.ca}), "Back");
+  $("tr").textContent = (S.msg + 1) + "/" + f.length;
+}
+function trend() {
+  const t = (S.data && S.data.trend) || [];
+  top("Trending", "24h");
+  const m = $("main"); m.innerHTML = t.length ? "" : '<div class="empty">Nothing trending yet</div>';
+  t.forEach((x, i) => {
+    const r = document.createElement("div"); r.className = "row";
+    r.insertAdjacentHTML("beforeend", '<div style="font-size:12px;width:18px">' + (i + 1) + '</div><div class="txt"><div class="l1 b"><span>$' + esc(x.sym)
+      + '</span><span>' + money(x.mcap) + '</span></div><div class="l2 dim">' + x.wallets + "w " + x.holders + "held " + x.callers + "call " + (CHAIN[x.chain] || esc(x.chain)) + '</div></div>');
+    r.onclick = () => openOpts({sym:x.sym, ca:x.token, link:x.link, chart:x.chart}); m.appendChild(r);
+  });
+  soft("", null, "Back");
+}
+function status() {
+  const st = S.data && S.data.status;
+  top("Status", st ? st.up + "/" + st.total : "");
+  $("main").innerHTML = !st ? '<div class="empty">' + esc(S.err || "Loading...") + '</div>'
+    : st.programs.map(([l, v, bad]) => '<div class="srow' + (bad ? " bad" : "") + '"><span>' + (bad ? "! " : "") + esc(l) + '</span><span>' + esc(v) + '</span></div>').join("")
+      + '<div class="empty">Updated ' + (S.lastOk ? ago(S.lastOk/1000) : "?") + '</div>';
+  soft("", null, "Back");
+}
+function sounds() {
+  top("Sounds");
+  $("main").innerHTML = '<div class="row" id="sRing"><div class="txt"><div class="l1"><span>Ring</span><span>' + (sound ? "ON" : "OFF")
+    + '</span></div></div></div><div class="row" id="sTest"><div class="txt"><div class="l1"><span>Test ring</span><span></span></div></div></div>'
+    + '<div class="empty">The ring plays while this app is open. iPhones do not let web apps vibrate or ring in the background - your Telegram alerts still do.</div>';
+  $("sRing").onclick = () => { sound = !sound; LS.set("sound", sound); toast("Ring is " + (sound ? "ON" : "OFF") + "."); sounds(); };
+  $("sTest").onclick = () => { ring(true); toast("Ring ring!"); };
+  soft("", null, "Back");
+}
+render(); pull();
+setInterval(pull, 4000);
+setInterval(() => { if (S.view === "standby") render(); }, 20000);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) pull(); });
+</script>
+</body>
+</html>
