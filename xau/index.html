@@ -20,12 +20,24 @@
 // This page holds no data and no secrets. Your link carries the key after the # (browsers never send
 // that part to any server) and the id of a private gist where the attic writes the trainer's current
 // address. We read the address, check the trainer answers, then go there with the key.
+// The first visit on a browser stores the key + gist in that browser, so afterwards the plain
+// address (jobloe-cloud.github.io/attic-phone/xau/) is all he needs to bookmark — it never changes.
 (async () => {
   const p = new URLSearchParams(location.hash.slice(1));
-  const k = p.get('k'), g = p.get('g');
+  let k = p.get('k'), g = p.get('g');
   const msg = document.getElementById('msg'), sub = document.getElementById('sub');
   const fail = (m, s) => { msg.textContent = m; sub.innerHTML = s || ''; };
-  if (!k || !g) return fail('This link is incomplete.', 'Copy the full link from the trainer: Settings → Use it from anywhere.');
+  const STORE = 'xau_trainer_link';
+  if (k && g) {
+    try {
+      localStorage.setItem(STORE, JSON.stringify({ k, g }));
+      // remembered: show the short, permanent address in the bar (that's the one to bookmark)
+      if (JSON.parse(localStorage.getItem(STORE)).k === k) history.replaceState(null, '', location.pathname);
+    } catch (e) { /* private window: the full link still works */ }
+  } else {
+    try { const d = JSON.parse(localStorage.getItem(STORE) || 'null'); if (d) { k = d.k; g = d.g; } } catch (e) {}
+  }
+  if (!k || !g) return fail('This browser doesn\'t know your trainer yet.', 'Open your full private link once on this browser (copy it at home: Settings → Use it from anywhere). After that, this short address works on its own.');
   let addr = null, at = null;
   try {
     const r = await fetch('https://api.github.com/gists/' + encodeURIComponent(g), { cache: 'no-store' });
