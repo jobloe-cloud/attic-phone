@@ -38,25 +38,32 @@
     try { const d = JSON.parse(localStorage.getItem(STORE) || 'null'); if (d) { k = d.k; g = d.g; } } catch (e) {}
   }
   if (!k || !g) return fail('This browser doesn\'t know your trainer yet.', 'Open your full private link once on this browser (copy it at home: Settings → Use it from anywhere). After that, this short address works on its own.');
-  let addr = null, at = null;
-  try {
-    const r = await fetch('https://api.github.com/gists/' + encodeURIComponent(g), { cache: 'no-store' });
-    const j = await r.json();
-    const d = JSON.parse(j.files['xau.json'].content);
-    addr = d.url; at = d.at;
-  } catch (e) {
-    return fail('Couldn\'t look up the trainer\'s address.', 'Check your internet, then <button onclick="location.reload()">Try again</button>');
+  // keeps trying on its own (every 15 s), so if the attic is restarting it just goes through when ready
+  for (let tries = 0; ; tries++) {
+    let addr = null, at = null;
+    try {
+      const r = await fetch('https://api.github.com/gists/' + encodeURIComponent(g), { cache: 'no-store' });
+      const j = await r.json();
+      const d = JSON.parse(j.files['xau.json'].content);
+      addr = d.url; at = d.at;
+    } catch (e) {
+      fail('Couldn\'t look up the trainer\'s address.', 'Check your internet. Trying again by itself…');
+    }
+    if (addr) {
+      try {
+        const ctl = new AbortController(); setTimeout(() => ctl.abort(), 8000);
+        const r = await fetch(addr + '/api/ping', { cache: 'no-store', signal: ctl.signal });
+        if (!r.ok) throw new Error(r.status);
+        return location.replace(addr + '/?k=' + encodeURIComponent(k));
+      } catch (e) {
+        const when = at ? new Date(at * 1000).toLocaleString() : '?';
+        fail('The trainer is offline.', 'The attic computer is off/asleep, or the trainer window is closed (last started ' + when +
+          '). If you\'re on a work network it may also block this kind of link.<br>Trying again by itself every 15 s… ' +
+          '<button onclick="location.reload()">Try now</button>');
+      }
+    }
+    await new Promise(r => setTimeout(r, 15000));
   }
-  try {
-    const ctl = new AbortController(); setTimeout(() => ctl.abort(), 8000);
-    const r = await fetch(addr + '/api/ping', { cache: 'no-store', signal: ctl.signal });
-    if (!r.ok) throw new Error(r.status);
-  } catch (e) {
-    const when = at ? new Date(at * 1000).toLocaleString() : '?';
-    return fail('The trainer is offline.', 'The attic computer is off/asleep, or the trainer window is closed (last started ' + when +
-      '). If you\'re on a work network it may also block this kind of link.<br><button onclick="location.reload()">Try again</button>');
-  }
-  location.replace(addr + '/?k=' + encodeURIComponent(k));
 })();
 </script>
 </body>
