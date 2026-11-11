@@ -7,64 +7,89 @@
 <title>XAU Replay Trainer</title>
 <style>
   :root { color-scheme: dark; }
-  body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #131722; color: #d1d4dc;
-         font: 15px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 0 16px; box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: #131722; color: #d1d4dc;
+         font: 15px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  #app { position: fixed; inset: 0; width: 100%; height: 100%; border: 0; display: none; background: #131722; }
+  #wait { position: fixed; inset: 0; display: grid; place-items: center; padding: 0 16px; box-sizing: border-box; }
   .card { max-width: 440px; text-align: center; line-height: 1.5; }
   .muted { color: #787b86; font-size: 13px; }
   button { margin-top: 12px; background: #2962ff; color: #fff; border: 0; border-radius: 4px; padding: 8px 14px; font: inherit; cursor: pointer; }
 </style>
 </head>
 <body>
-<div class="card"><div id="msg">Finding your trainer…</div><div id="sub" class="muted"></div></div>
+<div id="wait"><div class="card"><div id="msg">Finding your trainer…</div><div id="sub" class="muted"></div></div></div>
+<iframe id="app" title="XAU Replay Trainer" allow="fullscreen; clipboard-read; clipboard-write" allowfullscreen></iframe>
 <script>
-// This page holds no data and no secrets. Your link carries the key after the # (browsers never send
-// that part to any server) and the id of a private gist where the attic writes the trainer's current
-// address. We read the address, check the trainer answers, then go there with the key.
-// The first visit on a browser stores the key + gist in that browser, so afterwards the plain
-// address (jobloe-cloud.github.io/attic-phone/xau/) is all he needs to bookmark — it never changes.
-(async () => {
-  const p = new URLSearchParams(location.hash.slice(1));
-  let k = p.get('k'), g = p.get('g');
-  const msg = document.getElementById('msg'), sub = document.getElementById('sub');
-  const fail = (m, s) => { msg.textContent = m; sub.innerHTML = s || ''; };
-  const STORE = 'xau_trainer_link';
-  if (k && g) {
-    try {
-      localStorage.setItem(STORE, JSON.stringify({ k, g }));
-      // remembered: show the short, permanent address in the bar (that's the one to bookmark)
-      if (JSON.parse(localStorage.getItem(STORE)).k === k) history.replaceState(null, '', location.pathname);
-    } catch (e) { /* private window: the full link still works */ }
-  } else {
-    try { const d = JSON.parse(localStorage.getItem(STORE) || 'null'); if (d) { k = d.k; g = d.g; } } catch (e) {}
-  }
-  if (!k || !g) return fail('This browser doesn\'t know your trainer yet.', 'Open your full private link once on this browser (copy it at home: Settings → Use it from anywhere). After that, this short address works on its own.');
-  // keeps trying on its own (every 15 s), so if the attic is restarting it just goes through when ready
-  for (let tries = 0; ; tries++) {
-    let addr = null, at = null;
-    try {
-      const r = await fetch('https://api.github.com/gists/' + encodeURIComponent(g), { cache: 'no-store' });
-      const j = await r.json();
-      const d = JSON.parse(j.files['xau.json'].content);
-      addr = d.url; at = d.at;
-    } catch (e) {
-      fail('Couldn\'t look up the trainer\'s address.', 'Check your internet. Trying again by itself…');
+// ONE permanent link (his choice 2026-11-11): open to anyone who has it, no key, nothing stored.
+// The attic writes the trainer's current tunnel address into this gist; we read it, check the trainer
+// answers, and show it INSIDE this page, so the address bar always stays on this link.
+const GIST = '2094ac594c9407113cea26fe4a5c6e66';
+const msg = document.getElementById('msg'), sub = document.getElementById('sub');
+const frame = document.getElementById('app'), wait = document.getElementById('wait');
+const say = (m, s) => { msg.textContent = m; sub.innerHTML = s || ''; wait.style.display = 'grid'; frame.style.display = 'none'; };
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+// old links carried #k=…&g=… — ignore them and show the clean address
+if (location.hash || location.search) history.replaceState(null, '', location.pathname);
+try { localStorage.removeItem('xau_trainer_link'); } catch (e) {}
+
+let current = null, lastAt = null;
+async function lookup() {
+  // GitHub API first (always fresh); the raw file as a fallback if the API rate-limits this network
+  try {
+    const r = await fetch('https://api.github.com/gists/' + GIST, { cache: 'no-store' });
+    if (r.ok) { const d = JSON.parse((await r.json()).files['xau.json'].content); return d; }
+  } catch (e) {}
+  const r = await fetch('https://gist.githubusercontent.com/jobloe-cloud/' + GIST + '/raw/xau.json?t=' + Date.now(), { cache: 'no-store' });
+  if (!r.ok) throw new Error(r.status);
+  return await r.json();
+}
+async function alive(addr) {
+  try {
+    const ctl = new AbortController(); setTimeout(() => ctl.abort(), 8000);
+    const r = await fetch(addr + '/api/ping', { cache: 'no-store', signal: ctl.signal });
+    return r.ok;
+  } catch (e) { return false; }
+}
+function show(addr) {
+  if (current !== addr) { current = addr; frame.src = addr + '/web/index.html'; }
+  wait.style.display = 'none'; frame.style.display = 'block';
+  frame.focus();
+}
+async function connect() {
+  for (;;) {
+    let d = null;
+    try { d = await lookup(); lastAt = d.at; }
+    catch (e) { say('Couldn\'t look up the trainer\'s address.', 'Check your internet. Trying again by itself every 15 s…'); }
+    if (d && d.url && await alive(d.url)) return show(d.url);
+    if (d) {
+      const when = lastAt ? new Date(lastAt * 1000).toLocaleString() : '?';
+      say('The trainer is offline.', 'The attic computer is off/asleep, or the trainer window is closed (last started ' + when +
+        '). If you\'re on a work network it may also block this kind of link.<br>Trying again by itself every 15 s… ' +
+        '<button onclick="location.reload()">Try now</button>');
     }
-    if (addr) {
-      try {
-        const ctl = new AbortController(); setTimeout(() => ctl.abort(), 8000);
-        const r = await fetch(addr + '/api/ping', { cache: 'no-store', signal: ctl.signal });
-        if (!r.ok) throw new Error(r.status);
-        return location.replace(addr + '/?k=' + encodeURIComponent(k));
-      } catch (e) {
-        const when = at ? new Date(at * 1000).toLocaleString() : '?';
-        fail('The trainer is offline.', 'The attic computer is off/asleep, or the trainer window is closed (last started ' + when +
-          '). If you\'re on a work network it may also block this kind of link.<br>Trying again by itself every 15 s… ' +
-          '<button onclick="location.reload()">Try now</button>');
-      }
-    }
-    await new Promise(r => setTimeout(r, 15000));
+    await sleep(15000);
   }
-})();
+}
+// keep watching: if the trainer stops answering (attic restarted = new address), find it again.
+// The frame is only reloaded when the address really changed.
+let busy = false;
+async function watch(force) {
+  if (busy || !current) return;
+  busy = true;
+  try {
+    if (force || !(await alive(current))) {
+      if (!force && await alive(current)) return;  // one blip: ask twice before calling it gone
+      await connect();
+    }
+  } finally { busy = false; }
+}
+setInterval(() => watch(false), 30000);
+window.addEventListener('message', (e) => {
+  if (current && e.origin === new URL(current).origin && e.data && e.data.xau === 'reconnect') watch(true);
+});
+window.addEventListener('focus', () => frame.style.display === 'block' && frame.focus());
+connect();
 </script>
 </body>
 </html>
